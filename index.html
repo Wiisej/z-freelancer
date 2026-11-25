@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Z Freelancer</title>
+<style>
+  :root{--g:#0f7b4a;--g2:#e6f4ec;--ink:#1c2321;--mut:#6a7570;--bd:#dfe5e2;--bg:#f6f8f7;--red:#c0392b;--amb:#b7791f}
+  *{box-sizing:border-box}
+  body{margin:0;font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:var(--bg)}
+  header{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fff;border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
+  .brand{font-weight:800;color:var(--g);font-size:18px;flex:1}
+  nav{display:flex;gap:4px;padding:8px 10px;background:#fff;border-bottom:1px solid var(--bd);overflow-x:auto}
+  nav button{border:0;background:none;padding:8px 12px;border-radius:999px;font:inherit;color:var(--mut);white-space:nowrap;cursor:pointer}
+  nav button.on{background:var(--g2);color:var(--g);font-weight:700}
+  main,.wrap{max-width:720px;margin:0 auto;padding:14px}
+  .card{background:#fff;border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+  h2{margin:0 0 10px;font-size:20px} h3{margin:0 0 4px;font-size:17px}
+  .muted{color:var(--mut);font-size:14px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .sp{flex:1}
+  label{display:block;font-size:14px;font-weight:600;margin:10px 0 4px}
+  input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--bd);border-radius:10px;font:inherit;background:#fff}
+  textarea{min-height:90px;resize:vertical}
+  .chk{display:flex;gap:8px;align-items:center;font-weight:500;margin:6px 0}
+  .chk input{width:auto}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:480px){.grid{grid-template-columns:1fr}}
+  button.btn,a.btn{display:inline-block;border:0;background:var(--g);color:#fff;padding:10px 16px;border-radius:10px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none;text-align:center}
+  .btn.sec{background:var(--g2);color:var(--g)} .btn.red{background:#fdecea;color:var(--red)}
+  .btn.sm{padding:6px 11px;font-size:14px} .btn.full{width:100%;margin-top:14px}
+  .tag{display:inline-block;background:var(--g2);color:var(--g);padding:2px 9px;border-radius:999px;font-size:13px;font-weight:600}
+  .tag.amb{background:#fdf3dc;color:var(--amb)} .tag.red{background:#fdecea;color:var(--red)} .tag.gray{background:#eceeed;color:var(--mut)}
+  .price{font-weight:800;color:var(--g)}
+  .link{background:none;border:0;color:var(--mut);text-decoration:underline;cursor:pointer;font:inherit;font-size:13px;padding:0}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+  .modal.hidden{display:none}
+  .sheet{background:#fff;width:100%;max-width:560px;max-height:90vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px}
+  @media(min-width:600px){.modal{align-items:center}.sheet{border-radius:18px}}
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#1c2321;color:#fff;padding:10px 16px;border-radius:10px;z-index:30;max-width:90%}
+  .applicant{border-top:1px solid var(--bd);padding-top:10px;margin-top:10px}
+  .tabs{display:flex;gap:6px;margin-bottom:8px}
+  .tabs button{flex:1;padding:10px;border:1px solid var(--bd);background:#fff;border-radius:10px;font:inherit;cursor:pointer}
+  .tabs button.on{background:var(--g2);border-color:var(--g);color:var(--g);font-weight:700}
+  .roles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .roles label{border:1px solid var(--bd);border-radius:10px;padding:10px 6px;text-align:center;margin:0;cursor:pointer;font-size:14px}
+  .roles input{display:none} .roles input:checked+span{color:var(--g);font-weight:800}
+  .roles label:has(input:checked){background:var(--g2);border-color:var(--g)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal" class="modal hidden"><div class="sheet" id="sheet"></div></div>
+<datalist id="areas"></datalist>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* ================= CONFIG: paste your own values (Supabase > Project Settings > API) ================= */
+const SUPABASE_URL = 'https://wbvjflqncheudlrgmoyl.supabase.co/rest/v1/';
+const SUPABASE_ANON_KEY = 'sb_publishable_vZwMYT1O7CbpxGT4l56irA_dnkMaW1g';
+/* ===================================================================================================== */
+
+const CATEGORIES = ['Lawn & garden','Cleaning','Errands & delivery','Moving & lifting','Handyman & repairs','Painting','Laundry & ironing','Car washing','Cooking & catering','Other'];
+const AREAS = ['Kabulonga','Woodlands','Roma','Chelston','Kalingalinga','Matero','Chilenje','Chawama','Libala','Olympia','Northmead','Rhodes Park','Avondale','Chainda','Emmasdale','Makeni','Chamba Valley','Ibex Hill','Kalundu','Lilayi','Chilanga','Kabwata','Garden','Woodlands Extension'];
+
+const cfgOk = !SUPABASE_URL.includes('YOUR-PROJECT');
+const sb = cfgOk ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const state = { session:null, profile:null, phone:'', role:null, view:null, authMode:'login', jobs:{} };
+const app = document.getElementById('app');
+const $ = (s, r=document) => r.querySelector(s);
+
+/* ---------- helpers ---------- */
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => 'K' + Number(n).toLocaleString('en-US', {maximumFractionDigits:2});
+const fmtDate = d => d ? new Date(d + 'T00:00').toLocaleDateString('en-GB', {day:'numeric', month:'short'}) : 'Flexible';
+const ago = ts => { const m = Math.floor((Date.now() - new Date(ts)) / 60000); if (m < 1) return 'just now'; if (m < 60) return m + 'm ago'; const h = Math.floor(m/60); if (h < 24) return h + 'h ago'; return Math.floor(h/24) + 'd ago'; };
+const waLink = (phone, msg) => { let d = String(phone||'').replace(/\D/g,''); if (d.startsWith('0')) d = '260' + d.slice(1); return d ? `https://wa.me/${d}?text=${encodeURIComponent(msg||'')}` : null; };
+const stars = s => s && s.review_count > 0 ? `★ ${s.avg_rating} (${s.review_count})` : 'New';
+const opts = (list, sel) => list.map(x => `<option ${x===sel?'selected':''}>${esc(x)}</option>`).join('');
+function toast(m){ const t=document.createElement('div'); t.className='toast'; t.textContent=m; document.body.appendChild(t); setTimeout(()=>t.remove(),3200); }
+function openModal(html){ $('#sheet').innerHTML = html; $('#modal').classList.remove('hidden'); }
+function closeModal(){ $('#modal').classList.add('hidden'); }
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+$('#areas').innerHTML = AREAS.map(a => `<option value="${esc(a)}">`).join('');
+
+const rolesOf = p => { const r = []; if (p.is_worker) r.push('worker'); if (p.is_hirer) r.push('hirer'); return r.length ? r : ['hirer']; };
+const tabsFor = role => {
+  const t = role === 'worker'
+    ? [['jobs','Find jobs'],['applications','My applications'],['profile','Profile']]
+    : [['post','Post a job'],['myjobs','My jobs'],['profile','Profile']];
+  if (state.profile && state.profile.is_admin) t.push(['admin','Admin']);
+  return t;
+};
+
+async function getStats(ids){
+  ids = [...new Set(ids)].filter(Boolean); if (!ids.length) return {};
+  const { data } = await sb.from('profile_stats').select('*').in('user_id', ids);
+  return Object.fromEntries((data||[]).map(s => [s.user_id, s]));
+}
+async function getPhones(ids){
+  ids = [...new Set(ids)].filter(Boolean); if (!ids.length) return {};
+  const { data } = await sb.from('private_contacts').select('*').in('user_id', ids);
+  return Object.fromEntries((data||[]).map(c => [c.user_id, c.phone]));
+}
+async function myReviewedJobs(){
+  const { data } = await sb.from('reviews').select('job_id').eq('reviewer_id', state.profile.id);
+  return new Set((data||[]).map(r => r.job_id));
+}
+
+/* ---------- startup & auth ---------- */
+async function init(){
+  if (!cfgOk) { app.innerHTML = '<div class="wrap"><div class="card"><h2>Setup needed</h2><p>Open <b>index.html</b> and paste your Supabase URL and anon key at the top of the script. See README.md.</p></div></div>'; return; }
+  const { data } = await sb.auth.getSession();
+  state.session = data.session;
+  sb.auth.onAuthStateChange(async (ev, s) => {
+    if (ev === 'INITIAL_SESSION') return;
+    state.session = s;
+    if (s) await loadProfile(); else state.profile = null;
+    render();
+  });
+  if (state.session) await loadProfile();
+  render();
+}
+
+async function loadProfile(){
+  const uid = state.session.user.id;
+  const { data: p } = await sb.from('profiles').select('*').eq('id', uid).single();
+  const { data: c } = await sb.from('private_contacts').select('phone').eq('user_id', uid).single();
+  state.profile = p; state.phone = c ? c.phone : '';
+  if (p) {
+    const roles = rolesOf(p), saved = localStorage.getItem('zf_role');
+    state.role = roles.includes(saved) ? saved : roles[0];
+    const tabs = tabsFor(state.role);
+    if (!state.view || !tabs.some(t => t[0] === state.view)) state.view = tabs[0][0];
+  }
+}
+
+function renderAuth(){
+  const su = state.authMode === 'signup';
+  app.innerHTML = `<div class="wrap">
+    <div class="card" style="text-align:center"><div class="brand" style="font-size:26px">Z Freelancer</div>
+    <p class="muted">Find odd jobs. Find people to do them.</p></div>
+    <div class="card">
+      <div class="tabs"><button data-act="authMode" data-m="login" class="${su?'':'on'}">Log in</button><button data-act="authMode" data-m="signup" class="${su?'on':''}">Sign up</button></div>
+      <form data-form="${su?'signup':'login'}">
+        ${su ? `<label>Full name</label><input name="full_name" required maxlength="80">
+        <label>Phone (WhatsApp number)</label><input name="phone" type="tel" placeholder="097 123 4567" required>
+        <label>Your area</label><input name="area" list="areas" placeholder="e.g. Chilenje" required>
+        <label>I want to…</label>
+        <div class="roles">
+          <label><input type="radio" name="role" value="worker"><span>Find work</span></label>
+          <label><input type="radio" name="role" value="hirer" checked><span>Hire people</span></label>
+          <label><input type="radio" name="role" value="both"><span>Both</span></label>
+        </div>` : ''}
+        <label>Email</label><input name="email" type="email" required autocomplete="email">
+        <label>Password</label><input name="password" type="password" minlength="6" required autocomplete="${su?'new-password':'current-password'}">
+        <button class="btn full">${su?'Create account':'Log in'}</button>
+      </form>
+    </div></div>`;
+}
+
+/* ---------- main shell ---------- */
+function render(){
+  if (!state.session) return renderAuth();
+  const p = state.profile;
+  if (!p) { app.innerHTML = '<p class="muted wrap">Loading…</p>'; return; }
+  if (p.is_suspended) { app.innerHTML = '<div class="wrap"><div class="card"><h2>Account suspended</h2><p>Your account has been suspended after reports. Contact support if you think this is a mistake.</p><button class="btn" data-act="logout">Log out</button></div></div>'; return; }
+  const roles = rolesOf(p), tabs = tabsFor(state.role);
+  app.innerHTML = `<header><div class="brand">Z Freelancer</div>
+    ${roles.length > 1 ? `<button class="btn sec sm" data-act="setRole" data-role="${state.role==='worker'?'hirer':'worker'}">Switch to ${state.role==='worker'?'hiring':'working'}</button>` : `<span class="tag gray">${state.role==='worker'?'Worker':'Hirer'}</span>`}
+    <button class="link" data-act="logout">Log out</button></header>
+    <nav>${tabs.map(t => `<button data-act="goto" data-v="${t[0]}" class="${state.view===t[0]?'on':''}">${t[1]}</button>`).join('')}</nav>
+    <main id="content"></main>`;
+  (views[state.view] || views.profile)($('#content'));
+}
+
+/* ---------- WORKER: find jobs ---------- */
+function jobCard(j, applied){
+  return `<div class="card"><div class="row"><h3 class="sp">${esc(j.title)}</h3><span class="price">${money(j.budget)}</span></div>
+    <div class="row" style="margin:4px 0"><span class="tag">${esc(j.category)}</span><span class="muted">📍 ${esc(j.area)}</span><span class="muted">📅 ${fmtDate(j.job_date)}</span></div>
+    <p class="muted" style="margin:6px 0">${esc((j.description||'').slice(0,140))}${(j.description||'').length>140?'…':''}</p>
+    <div class="row"><span class="muted sp">${esc(j.hirer ? j.hirer.full_name : '')} · ${ago(j.created_at)}</span>
+    ${applied ? '<span class="tag amb">Applied</span>' : ''}
+    <button class="btn sm" data-act="openJob" data-id="${j.id}">${applied?'View':'View & apply'}</button></div></div>`;
+}
+
+async function viewJobs(el){
+  const p = state.profile;
+  el.innerHTML = `${p.categories.length ? '' : '<div class="card"><b>Tip:</b> choose the work you do in your <a href="#" data-act="goto" data-v="profile">profile</a> to get the best matches.</div>'}
+    <div class="card"><div class="grid"><div><select id="fCat"><option value="">All categories</option>${opts(CATEGORIES)}</select></div>
+    <div><input id="fQ" list="areas" placeholder="Search area or keyword"></div></div>
+    <label class="chk"><input type="checkbox" id="fMine" ${p.categories.length?'checked':''}> Only my categories</label></div>
+    <div id="list"><p class="muted">Loading…</p></div>`;
+  const [{ data: jobs, error }, { data: mine }] = await Promise.all([
+    sb.from('jobs').select('*, hirer:profiles!jobs_hirer_id_fkey(full_name)').eq('status','open').order('created_at',{ascending:false}).limit(150),
+    sb.from('applications').select('job_id').eq('worker_id', p.id)
+  ]);
+  if (error) return toast(error.message);
+  const applied = new Set((mine||[]).map(a => a.job_id));
+  (jobs||[]).forEach(j => state.jobs[j.id] = j);
+  const draw = () => {
+    const cat = $('#fCat',el).value, q = $('#fQ',el).value.toLowerCase(), onlyMine = $('#fMine',el).checked;
+    const rows = (jobs||[]).filter(j => j.hirer_id !== p.id && (!cat || j.category === cat)
+      && (!onlyMine || !p.categories.length || p.categories.includes(j.category))
+      && (!q || (j.title + ' ' + j.description + ' ' + j.area).toLowerCase().includes(q)));
+    $('#list',el).innerHTML = rows.length ? rows.map(j => jobCard(j, applied.has(j.id))).join('') : '<p class="muted">No jobs match right now. Check back soon.</p>';
+  };
+  ['fCat','fQ','fMine'].forEach(id => $('#'+id,el).addEventListener('input', draw));
+  draw();
+}
+
+/* ---------- WORKER: my applications ---------- */
+async function viewApplications(el){
+  el.innerHTML = '<p class="muted">Loading…</p>';
+  const { data: apps, error } = await sb.from('applications')
+    .select('*, job:jobs(*, hirer:profiles!jobs_hirer_id_fkey(full_name))')
+    .eq('worker_id', state.profile.id).order('created_at',{ascending:false});
+  if (error) return toast(error.message);
+  const accepted = (apps||[]).filter(a => a.status === 'accepted');
+  const [phones, reviewed] = await Promise.all([getPhones(accepted.map(a => a.job.hirer_id)), myReviewedJobs()]);
+  el.innerHTML = '<h2>My applications</h2>' + ((apps||[]).length ? apps.map(a => {
+    const j = a.job, wa = a.status === 'accepted' ? waLink(phones[j.hirer_id], `Hi ${j.hirer.full_name}, I'm following up on "${j.title}" from Z Freelancer.`) : null;
+    const tag = a.status === 'accepted' ? '<span class="tag">Accepted</span>' : a.status === 'rejected' ? '<span class="tag gray">Not selected</span>' : '<span class="tag amb">Pending</span>';
+    return `<div class="card"><div class="row"><h3 class="sp">${esc(j.title)}</h3>${tag}</div>
+      <p class="muted" style="margin:4px 0">${esc(j.category)} · 📍 ${esc(j.area)} · your offer <b>${money(a.offer_price)}</b></p>
+      <div class="row">${wa ? `<a class="btn sm" target="_blank" rel="noopener" href="${wa}">WhatsApp ${esc(j.hirer.full_name)}</a>` : ''}
+      ${a.status==='accepted' && j.status==='completed' && !reviewed.has(j.id) ? `<button class="btn sm sec" data-act="rate" data-job="${j.id}" data-user="${j.hirer_id}" data-name="${esc(j.hirer.full_name)}">Rate hirer</button>` : ''}
+      ${a.status==='accepted' && j.status==='completed' ? '<span class="tag gray">Job completed</span>' : ''}
+      ${a.status==='pending' ? `<button class="btn sm red" data-act="withdraw" data-id="${a.id}">Withdraw</button>` : ''}
+      ${a.status==='accepted' ? `<button class="link" data-act="report" data-user="${j.hirer_id}" data-job="${j.id}">Report</button>` : ''}</div></div>`;
+  }).join('') : '<div class="card muted">You haven\'t applied to anything yet. Go to <b>Find jobs</b>.</div>');
+}
+
+/* ---------- HIRER: post a job ---------- */
+function viewPost(el){
+  el.innerHTML = `<h2>Post a job</h2><div class="card"><form data-form="post">
+    <label>What do you need done?</label><input name="title" required minlength="3" maxlength="120" placeholder="e.g. Cut the grass at my yard">
+    <div class="grid"><div><label>Category</label><select name="category">${opts(CATEGORIES)}</select></div>
+    <div><label>Area</label><input name="area" list="areas" required value="${esc(state.profile.area)}"></div>
+    <div><label>Budget (Kwacha)</label><input name="budget" type="number" min="0" step="1" required placeholder="150"></div>
+    <div><label>Date (optional)</label><input name="job_date" type="date"></div></div>
+    <label>Details</label><textarea name="description" maxlength="2000" placeholder="Size of the job, tools needed, any other details"></textarea>
+    <button class="btn full">Post job</button></form></div>`;
+}
+
+/* ---------- HIRER: my jobs ---------- */
+async function viewMyJobs(el){
+  el.innerHTML = '<p class="muted">Loading…</p>';
+  const { data: jobs, error } = await sb.from('jobs')
+    .select('*, applications(*, worker:profiles!applications_worker_id_fkey(id, full_name, area, bio, categories))')
+    .eq('hirer_id', state.profile.id).order('created_at',{ascending:false});
+  if (error) return toast(error.message);
+  const workerIds = (jobs||[]).flatMap(j => j.applications.map(a => a.worker_id));
+  const [stats, phones, reviewed] = await Promise.all([
+    getStats(workerIds), getPhones((jobs||[]).map(j => j.assigned_worker_id)), myReviewedJobs()]);
+  const stag = { open:'<span class="tag">Open</span>', assigned:'<span class="tag amb">In progress</span>', completed:'<span class="tag gray">Completed</span>', cancelled:'<span class="tag red">Cancelled</span>' };
+  el.innerHTML = '<h2>My jobs</h2>' + ((jobs||[]).length ? jobs.map(j => {
+    let body = '';
+    if (j.status === 'open') {
+      body = j.applications.length ? j.applications.map(a => `<div class="applicant">
+        <div class="row"><b class="sp">${esc(a.worker.full_name)}</b><span class="price">${money(a.offer_price)}</span></div>
+        <div class="muted">${stars(stats[a.worker_id])} · ${(stats[a.worker_id]||{}).jobs_done||0} jobs done · 📍 ${esc(a.worker.area)}</div>
+        ${a.note ? `<p style="margin:6px 0">${esc(a.note)}</p>` : ''}
+        ${a.worker.categories.length ? `<div class="muted">Does: ${esc(a.worker.categories.join(', '))}</div>` : ''}
+        <div class="row" style="margin-top:6px"><button class="btn sm" data-act="accept" data-id="${a.id}">Accept</button>
+        <button class="link" data-act="report" data-user="${a.worker_id}" data-job="${j.id}">Report</button></div></div>`).join('')
+        : '<p class="muted" style="margin:8px 0 0">No applicants yet. Workers near you are being matched.</p>';
+      body += `<div style="margin-top:10px"><button class="btn sm red" data-act="cancelJob" data-id="${j.id}">Cancel job</button></div>`;
+    } else if (j.status === 'assigned' || j.status === 'completed') {
+      const a = j.applications.find(x => x.status === 'accepted');
+      if (a) {
+        const wa = waLink(phones[a.worker_id], `Hi ${a.worker.full_name}, about "${j.title}" on Z Freelancer.`);
+        body = `<div class="applicant"><div class="row"><b class="sp">${esc(a.worker.full_name)}</b><span class="price">${money(a.offer_price)}</span></div>
+          <div class="row" style="margin-top:6px">${wa ? `<a class="btn sm" target="_blank" rel="noopener" href="${wa}">WhatsApp ${esc(a.worker.full_name)}</a>` : ''}
+          ${j.status==='assigned' ? `<button class="btn sm sec" data-act="complete" data-id="${j.id}">Mark completed</button>` : ''}
+          ${j.status==='completed' && !reviewed.has(j.id) ? `<button class="btn sm sec" data-act="rate" data-job="${j.id}" data-user="${a.worker_id}" data-name="${esc(a.worker.full_name)}">Rate worker</button>` : ''}
+          <button class="link" data-act="report" data-user="${a.worker_id}" data-job="${j.id}">Report</button></div></div>`;
+      }
+    }
+    return `<div class="card"><div class="row"><h3 class="sp">${esc(j.title)}</h3>${stag[j.status]}</div>
+      <p class="muted" style="margin:4px 0">${esc(j.category)} · 📍 ${esc(j.area)} · ${money(j.budget)} · ${j.status==='open' ? j.applications.length + ' applicant(s)' : fmtDate(j.job_date)}</p>${body}</div>`;
+  }).join('') : '<div class="card muted">You haven\'t posted a job yet.</div>');
+}
+
+/* ---------- profile ---------- */
+async function viewProfile(el){
+  const p = state.profile, s = (await getStats([p.id]))[p.id];
+  el.innerHTML = `<h2>My profile</h2>
+    <div class="card"><b>${esc(p.full_name)}</b> <span class="muted">· ${stars(s)} · ${s ? s.jobs_done : 0} jobs done</span></div>
+    <div class="card"><form data-form="profile">
+      <label>Full name</label><input name="full_name" required maxlength="80" value="${esc(p.full_name)}">
+      <label>Phone (shared only after a job is accepted)</label><input name="phone" type="tel" required value="${esc(state.phone)}">
+      <label>Area</label><input name="area" list="areas" required value="${esc(p.area)}">
+      <label>About me</label><textarea name="bio" maxlength="500" placeholder="Experience, tools you have, how you work">${esc(p.bio)}</textarea>
+      <label>I use this app to</label>
+      <label class="chk"><input type="checkbox" name="is_worker" ${p.is_worker?'checked':''}> Find work</label>
+      <label class="chk"><input type="checkbox" name="is_hirer" ${p.is_hirer?'checked':''}> Hire people</label>
+      <label>Work I do (for workers)</label>
+      ${CATEGORIES.map(c => `<label class="chk"><input type="checkbox" name="cat" value="${esc(c)}" ${p.categories.includes(c)?'checked':''}> ${esc(c)}</label>`).join('')}
+      <label class="chk" style="margin-top:12px"><input type="checkbox" name="available" ${p.available?'checked':''}> I'm available for work</label>
+      <button class="btn full">Save profile</button></form></div>`;
+}
+
+/* ---------- admin ---------- */
+async function viewAdmin(el){
+  el.innerHTML = '<p class="muted">Loading…</p>';
+  const [{ data: reps }, { data: jobs }] = await Promise.all([
+    sb.from('reports').select('*, reporter:profiles!reports_reporter_id_fkey(full_name), reported:profiles!reports_reported_user_id_fkey(id, full_name, is_suspended)').order('created_at',{ascending:false}).limit(50),
+    sb.from('jobs').select('id,title,area,status,created_at').order('created_at',{ascending:false}).limit(30)]);
+  el.innerHTML = `<h2>Reports</h2>` + ((reps||[]).length ? reps.map(r => `<div class="card">
+    <b>${esc(r.reported.full_name)}</b> ${r.reported.is_suspended?'<span class="tag red">Suspended</span>':''}
+    <p style="margin:4px 0">${esc(r.reason)}</p><div class="muted">Reported by ${esc(r.reporter.full_name)} · ${ago(r.created_at)}</div>
+    <div class="row" style="margin-top:6px"><button class="btn sm ${r.reported.is_suspended?'sec':'red'}" data-act="suspend" data-user="${r.reported.id}" data-flag="${!r.reported.is_suspended}">${r.reported.is_suspended?'Restore user':'Suspend user'}</button>
+    ${r.job_id ? `<button class="btn sm red" data-act="adminDeleteJob" data-id="${r.job_id}">Delete job</button>` : ''}</div></div>`).join('') : '<div class="card muted">No reports.</div>')
+    + `<h2>Recent jobs</h2>` + (jobs||[]).map(j => `<div class="card row"><div class="sp"><b>${esc(j.title)}</b><div class="muted">${esc(j.area)} · ${j.status} · ${ago(j.created_at)}</div></div>
+    <button class="btn sm red" data-act="adminDeleteJob" data-id="${j.id}">Delete</button></div>`).join('');
+}
+
+const views = { jobs:viewJobs, applications:viewApplications, post:viewPost, myjobs:viewMyJobs, profile:viewProfile, admin:viewAdmin };
+
+/* ---------- click actions ---------- */
+const act = {
+  authMode: d => { state.authMode = d.m; renderAuth(); },
+  logout: async () => { await sb.auth.signOut(); },
+  setRole: d => { state.role = d.role; localStorage.setItem('zf_role', d.role); state.view = tabsFor(d.role)[0][0]; render(); },
+  goto: d => { state.view = d.v; render(); window.scrollTo(0,0); },
+
+  openJob: async d => {
+    const j = state.jobs[d.id]; if (!j) return;
+    const { data: mine } = await sb.from('applications').select('*').eq('job_id', j.id).eq('worker_id', state.profile.id).maybeSingle();
+    const hs = (await getStats([j.hirer_id]))[j.hirer_id];
+    openModal(`<h2>${esc(j.title)}</h2>
+      <div class="row"><span class="tag">${esc(j.category)}</span><span class="muted">📍 ${esc(j.area)}</span><span class="muted">📅 ${fmtDate(j.job_date)}</span><span class="price sp" style="text-align:right">${money(j.budget)}</span></div>
+      <p>${esc(j.description) || '<span class="muted">No extra details.</span>'}</p>
+      <p class="muted">Posted by ${esc(j.hirer.full_name)} · ${stars(hs)}</p>
+      ${mine ? `<div class="card" style="background:var(--g2)">You applied with an offer of <b>${money(mine.offer_price)}</b>. Status: <b>${mine.status}</b>.</div>` : `
+      <form data-form="apply" data-job="${j.id}">
+        <label>Your price (Kwacha)</label><input name="offer_price" type="number" min="0" step="1" required value="${Number(j.budget)}">
+        <label>Message to the hirer</label><textarea name="note" maxlength="500" placeholder="Say when you can come and what you'll bring"></textarea>
+        <button class="btn full">Send application</button></form>`}
+      <div class="row" style="margin-top:12px"><button class="btn sec sm" data-act="closeModal">Close</button><span class="sp"></span>
+      <button class="link" data-act="report" data-user="${j.hirer_id}" data-job="${j.id}">Report this job</button></div>`);
+  },
+  closeModal: () => closeModal(),
+  withdraw: async d => { const { error } = await sb.from('applications').delete().eq('id', d.id); if (error) return toast(error.message); toast('Application withdrawn'); render(); },
+  accept: async d => {
+    if (!confirm('Accept this worker? Other applicants will be declined.')) return;
+    const { error } = await sb.rpc('accept_application', { p_app_id: d.id });
+    if (error) return toast(error.message); toast('Accepted. You can now contact them on WhatsApp.'); render();
+  },
+  complete: async d => {
+    if (!confirm('Mark this job as completed?')) return;
+    const { error } = await sb.from('jobs').update({ status:'completed' }).eq('id', d.id);
+    if (error) return toast(error.message); toast('Job completed. Please rate the worker.'); render();
+  },
+  cancelJob: async d => {
+    if (!confirm('Cancel this job?')) return;
+    const { error } = await sb.from('jobs').update({ status:'cancelled' }).eq('id', d.id);
+    if (error) return toast(error.message); render();
+  },
+  rate: d => openModal(`<h2>Rate ${esc(d.name)}</h2><form data-form="rate" data-job="${d.job}" data-user="${d.user}">
+    <label>Rating</label><select name="rating"><option value="5">★★★★★ Excellent</option><option value="4">★★★★ Good</option><option value="3">★★★ OK</option><option value="2">★★ Poor</option><option value="1">★ Bad</option></select>
+    <label>Comment (optional)</label><textarea name="comment" maxlength="500"></textarea>
+    <button class="btn full">Submit review</button></form>`),
+  report: d => openModal(`<h2>Report</h2><form data-form="report" data-job="${d.job||''}" data-user="${d.user}">
+    <label>What happened?</label><textarea name="reason" required minlength="3" maxlength="500" placeholder="No-show, fake job, abusive, tried to take it off the app…"></textarea>
+    <button class="btn red full">Send report</button></form>`),
+  suspend: async d => { const { error } = await sb.rpc('admin_set_suspended', { p_user: d.user, p_flag: d.flag === 'true' }); if (error) return toast(error.message); toast('Done'); render(); },
+  adminDeleteJob: async d => { if (!confirm('Delete this job permanently?')) return; const { error } = await sb.from('jobs').delete().eq('id', d.id); if (error) return toast(error.message); toast('Job deleted'); render(); }
+};
+document.addEventListener('click', e => { const t = e.target.closest('[data-act]'); if (t && act[t.dataset.act]) { e.preventDefault(); act[t.dataset.act](t.dataset, t); } });
+
+/* ---------- form handlers ---------- */
+const forms = {
+  login: async f => {
+    const v = Object.fromEntries(new FormData(f));
+    const { error } = await sb.auth.signInWithPassword({ email: v.email, password: v.password });
+    if (error) toast(error.message);
+  },
+  signup: async f => {
+    const v = Object.fromEntries(new FormData(f));
+    const { data, error } = await sb.auth.signUp({ email: v.email, password: v.password, options: { data: {
+      full_name: v.full_name.trim(), phone: v.phone.trim(), area: v.area.trim(),
+      is_worker: v.role !== 'hirer', is_hirer: v.role !== 'worker' } } });
+    if (error) return toast(error.message);
+    if (!data.session) { state.authMode = 'login'; renderAuth(); toast('Check your email to confirm, then log in.'); }
+  },
+  post: async f => {
+    const v = Object.fromEntries(new FormData(f));
+    const { error } = await sb.from('jobs').insert({ hirer_id: state.profile.id, title: v.title.trim(), description: v.description.trim(),
+      category: v.category, area: v.area.trim(), budget: Number(v.budget), job_date: v.job_date || null });
+    if (error) return toast(error.message);
+    toast('Job posted!'); state.view = 'myjobs'; render();
+  },
+  apply: async f => {
+    const v = Object.fromEntries(new FormData(f));
+    const { error } = await sb.from('applications').insert({ job_id: f.dataset.job, worker_id: state.profile.id, offer_price: Number(v.offer_price), note: v.note.trim() });
+    if (error) return toast(error.code === '23505' ? 'You already applied to this job' : error.message);
+    closeModal(); toast('Application sent'); render();
+  },
+  rate: async f => {
+    const v = Object.fromEntries(new FormData(f));
+    const { error } = await sb.from('reviews').insert({ job_id: f.dataset.job, reviewer_id: state.profile.id, reviewee_id: f.dataset.user, rating: Number(v.rating), comment: v.comment.trim() });
+    if (error) return toast(error.message);
+    closeModal(); toast('Thanks for your review'); render();
+  },
+  report: async f => {
+    const v = Object.fromEntries(new FormData(f));
+    const { error } = await sb.from('reports').insert({ reporter_id: state.profile.id, reported_user_id: f.dataset.user, job_id: f.dataset.job || null, reason: v.reason.trim() });
+    if (error) return toast(error.message);
+    closeModal(); toast('Report sent. We will review it.');
+  },
+  profile: async f => {
+    const fd = new FormData(f), v = Object.fromEntries(fd);
+    const is_worker = !!v.is_worker, is_hirer = !!v.is_hirer;
+    if (!is_worker && !is_hirer) return toast('Pick at least one: find work or hire people');
+    const { error } = await sb.from('profiles').update({ full_name: v.full_name.trim(), area: v.area.trim(), bio: v.bio.trim(),
+      categories: fd.getAll('cat'), is_worker, is_hirer, available: !!v.available }).eq('id', state.profile.id);
+    if (error) return toast(error.message);
+    const { error: e2 } = await sb.from('private_contacts').update({ phone: v.phone.trim() }).eq('user_id', state.profile.id);
+    if (e2) return toast(e2.message);
+    await loadProfile(); toast('Profile saved'); render();
+  }
+};
+document.addEventListener('submit', async e => {
+  const f = e.target.closest('form[data-form]'); if (!f) return;
+  e.preventDefault();
+  const b = f.querySelector('button:not([type=button])'); if (b) b.disabled = true;
+  try { await forms[f.dataset.form](f); } finally { if (b) b.disabled = false; }
+});
+
+init();
+</script>
+</body>
+</html>
