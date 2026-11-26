@@ -74,7 +74,7 @@ const PAY_METHODS = ['Cash','MTN Mobile Money','Airtel Money','Zamtel Kwacha','B
 
 const cfgOk = typeof SUPABASE_URL !== 'undefined' && typeof SUPABASE_ANON_KEY !== 'undefined' && !SUPABASE_URL.includes('YOUR-PROJECT');
 const sb = cfgOk ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-const state = { session:null, profile:null, phone:'', role:null, view:null, authMode:'login', jobs:{}, adminTab:'people' };
+const state = { session:null, profile:null, phone:'', role:null, view:null, authMode:'login', jobs:{}, locs:{}, adminTab:'people' };
 const app = document.getElementById('app');
 const $ = (s, r=document) => r.querySelector(s);
 
@@ -122,6 +122,32 @@ async function getPhones(ids){
   ids = [...new Set(ids)].filter(Boolean); if (!ids.length) return {};
   const { data } = await sb.from('private_contacts').select('*').in('user_id', ids);
   return Object.fromEntries((data||[]).map(c => [c.user_id, c.phone]));
+}
+async function getLocations(ids){
+  ids = [...new Set(ids)].filter(Boolean); if (!ids.length) return {};
+  const { data } = await sb.from('job_locations').select('*').in('job_id', ids);
+  return Object.fromEntries((data||[]).map(l => [l.job_id, l]));
+}
+/* Hirer: pin + landmark fields (used when posting and when editing a job's location) */
+const locationFields = loc => {
+  const has = loc && loc.latitude != null && loc.longitude != null;
+  return `<div class="note" style="margin-top:14px"><b>Where is the job?</b>
+    <div class="muted" style="margin:2px 0 8px">Only the worker you accept will see the exact location. Everyone else only sees the area.</div>
+    <input type="hidden" name="latitude" value="${has ? loc.latitude : ''}"><input type="hidden" name="longitude" value="${has ? loc.longitude : ''}">
+    <div class="row"><button type="button" class="btn sm" data-act="useGps">📍 Use my current location</button><button type="button" class="link" data-act="clearGps">Clear pin</button></div>
+    <div class="gpsStatus muted" style="margin:6px 0">${has ? '✓ Location pinned' : 'No pin yet. Tap the button while you are at the job site.'}</div>
+    <label>Landmark or address</label><input name="address_note" maxlength="300" value="${esc(loc ? loc.address_note : '')}" placeholder="e.g. Plot 12, opposite Chilenje Market, blue gate"></div>`;
+};
+/* Worker: map + navigation buttons for the accepted job */
+function navBlock(loc, j){
+  const has = loc.latitude != null && loc.longitude != null;
+  const dest = has ? `${loc.latitude},${loc.longitude}` : encodeURIComponent([loc.address_note, j.area, 'Zambia'].filter(Boolean).join(', '));
+  const base = `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
+  const la = loc.latitude, lo = loc.longitude, d = 0.004;
+  const map = has ? `<iframe title="Job location map" loading="lazy" style="width:100%;height:190px;border:1px solid var(--bd);border-radius:10px;margin-top:8px" src="${esc(`https://www.openstreetmap.org/export/embed.html?bbox=${(lo-d).toFixed(5)},${(la-d*0.75).toFixed(5)},${(lo+d).toFixed(5)},${(la+d*0.75).toFixed(5)}&layer=mapnik&marker=${la},${lo}`)}"></iframe>` : '';
+  return `<div class="note"><b>📍 Job location</b>${loc.address_note ? `<div>${esc(loc.address_note)}</div>` : ''}${map}
+    <div class="row" style="margin-top:8px"><a class="btn sm" target="_blank" rel="noopener" href="${esc(base + '&travelmode=driving')}">Navigate</a>
+    <a class="btn sm sec" target="_blank" rel="noopener" href="${esc(base + '&travelmode=walking')}">Walking directions</a></div></div>`;
 }
 async function myReviewedJobs(){
   const { data } = await sb.from('reviews').select('job_id').eq('reviewer_id', state.profile.id);
@@ -306,7 +332,8 @@ async function viewApplications(el){
   if (error) return toast(error.message);
   const list = (apps||[]).filter(a => a.job);
   const accepted = list.filter(a => a.status === 'accepted');
-  const [phones, reviewed] = await Promise.all([getPhones(accepted.map(a => a.job.hirer_id)), myReviewedJobs()]);
+  const assignedIds = accepted.filter(a => a.job.status === 'assigned').map(a => a.job.id);
+  const [phones, reviewed, locs] = await Promise.all([getPhones(accepted.map(a => a.job.hirer_id)), myReviewedJobs(), getLocations(assignedIds)]);
   el.innerHTML = '<h2>My applications</h2>' + (list.length ? list.map(a => {
     const j = a.job, hn = j.hirer ? j.hirer.full_name : '';
     const wa = a.status === 'accepted' ? waLink(phones[j.hirer_id], `Hi ${hn}, I'm following up on "${j.title}" from Z Freelancer.`) : null;
@@ -319,9 +346,12 @@ async function viewApplications(el){
         <button class="btn sm red" data-act="report" data-user="${j.hirer_id}" data-job="${j.id}">Not received</button></div></div>`;
       else pay = '<div class="note">Job completed. Waiting for the hirer to pay you.</div>';
     }
+    let nav = '';
+    if (a.status === 'accepted' && j.status === 'assigned')
+      nav = locs[j.id] ? navBlock(locs[j.id], j) : '<div class="note">The hirer has not shared the exact location yet. Message them on WhatsApp.</div>';
     return `<div class="card"><div class="row"><h3 class="sp">${esc(j.title)}</h3>${tag}</div>
       <p class="muted" style="margin:4px 0">${esc(j.category)} · 📍 ${esc(j.area)} · your offer <b>${money(a.offer_price)}</b></p>
-      <div class="row" style="margin:4px 0">${avatar(j.hirer && j.hirer.avatar_url, hn, 24)}<span class="muted">${esc(hn)}</span></div>${pay}
+      <div class="row" style="margin:4px 0">${avatar(j.hirer && j.hirer.avatar_url, hn, 24)}<span class="muted">${esc(hn)}</span></div>${nav}${pay}
       <div class="row">${wa ? `<a class="btn sm" target="_blank" rel="noopener" href="${wa}">WhatsApp ${esc(hn)}</a>` : ''}
       ${a.status==='accepted' && j.status==='completed' && !reviewed.has(j.id) ? `<button class="btn sm sec" data-act="rate" data-job="${j.id}" data-user="${j.hirer_id}" data-name="${esc(hn)}">Rate hirer</button>` : ''}
       ${a.status==='pending' ? `<button class="btn sm red" data-act="withdraw" data-id="${a.id}">Withdraw</button>` : ''}
@@ -338,6 +368,7 @@ function viewPost(el){
     <div><label>Budget (Kwacha)</label><input name="budget" type="number" min="0" step="1" required placeholder="150"></div>
     <div><label>Date (optional)</label><input name="job_date" type="date"></div></div>
     <label>Details</label><textarea name="description" maxlength="2000" placeholder="Size of the job, tools needed, any other details"></textarea>
+    ${locationFields(null)}
     <button class="btn full">Submit job</button>
     <p class="muted" style="margin-bottom:0">An admin checks every job before workers can see it.</p></form></div>`;
 }
@@ -350,8 +381,9 @@ async function viewMyJobs(el){
     .eq('hirer_id', state.profile.id).order('created_at',{ascending:false});
   if (error) return toast(error.message);
   const workerIds = (jobs||[]).flatMap(j => j.applications.map(a => a.worker_id));
-  const [stats, phones, reviewed] = await Promise.all([
-    getStats(workerIds), getPhones((jobs||[]).map(j => j.assigned_worker_id)), myReviewedJobs()]);
+  const [stats, phones, reviewed, locs] = await Promise.all([
+    getStats(workerIds), getPhones((jobs||[]).map(j => j.assigned_worker_id)), myReviewedJobs(), getLocations((jobs||[]).map(j => j.id))]);
+  state.locs = locs;
   const stag = { open:'<span class="tag">Open</span>', assigned:'<span class="tag amb">In progress</span>', completed:'<span class="tag gray">Completed</span>', cancelled:'<span class="tag red">Cancelled</span>' };
   el.innerHTML = '<h2>My jobs</h2>' + ((jobs||[]).length ? jobs.map(j => {
     let body = '', tag = stag[j.status];
@@ -388,6 +420,11 @@ async function viewMyJobs(el){
           ${j.status==='completed' && !reviewed.has(j.id) ? `<button class="btn sm sec" data-act="rate" data-job="${j.id}" data-user="${a.worker_id}" data-name="${esc(wn)}">Rate worker</button>` : ''}
           <button class="link" data-act="report" data-user="${a.worker_id}" data-job="${j.id}">Report</button></div></div>`;
       }
+    }
+    if (j.status === 'open' || j.status === 'assigned') {
+      const loc = locs[j.id];
+      body += `<div class="row" style="margin-top:10px"><span class="muted sp">${loc ? (loc.latitude != null ? '📍 Pin saved' : '📍 Landmark saved') : '📍 No location yet'}</span>
+        <button class="btn sm sec" data-act="editLocation" data-id="${j.id}">${loc ? 'Edit' : 'Add'} location</button></div>`;
     }
     if (j.status === 'open') body += `<div style="margin-top:10px"><button class="btn sm red" data-act="cancelJob" data-id="${j.id}">Cancel job</button></div>`;
     const sub = j.status === 'open' && j.approval_status === 'approved' ? j.applications.length + ' applicant(s)' : fmtDate(j.job_date);
@@ -507,6 +544,20 @@ const act = {
       <button class="link" data-act="report" data-user="${j.hirer_id}" data-job="${j.id}">Report this job</button></div>`);
   },
   closeModal: () => closeModal(),
+  useGps: (d, t) => {
+    const f = t.closest('form'), st = f.querySelector('.gpsStatus');
+    if (!navigator.geolocation) return toast('This phone cannot share its location. Type a landmark instead.');
+    st.textContent = 'Getting your location…';
+    navigator.geolocation.getCurrentPosition(pos => {
+      f.elements.latitude.value = pos.coords.latitude.toFixed(6);
+      f.elements.longitude.value = pos.coords.longitude.toFixed(6);
+      st.textContent = `✓ Location pinned (accurate to about ${Math.round(pos.coords.accuracy)} m)`;
+    }, () => { st.textContent = 'Could not get your location. Allow location access, or type a landmark instead.'; },
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  },
+  clearGps: (d, t) => { const f = t.closest('form'); f.elements.latitude.value = ''; f.elements.longitude.value = ''; f.querySelector('.gpsStatus').textContent = 'No pin yet.'; },
+  editLocation: d => openModal(`<h2>Job location</h2><form data-form="location" data-job="${d.id}">${locationFields(state.locs[d.id])}
+    <button class="btn full">Save location</button></form><div style="margin-top:10px"><button class="btn sec sm" data-act="closeModal">Close</button></div>`),
   withdraw: async d => { const { error } = await sb.from('applications').delete().eq('id', d.id); if (error) return toast(error.message); toast('Application withdrawn'); render(); },
   accept: async d => { if (confirm('Accept this worker? Other applicants will be declined.')) await rpc('accept_application', { p_app_id: d.id }, 'Accepted. You can now contact them on WhatsApp.'); },
   complete: async d => { if (confirm('Mark this job as completed?')) await rpc('complete_job', { p_job: d.id }, 'Job completed. Now confirm your payment.'); },
@@ -562,16 +613,29 @@ const forms = {
   },
   post: async f => {
     const v = Object.fromEntries(new FormData(f));
-    const { error } = await sb.from('jobs').insert({ hirer_id: state.profile.id, title: v.title.trim(), description: v.description.trim(),
-      category: v.category, area: v.area.trim(), budget: Number(v.budget), job_date: v.job_date || null });
+    if (!v.latitude && !v.address_note.trim()) return toast('Add a pin or a landmark so the worker can find you');
+    const { data: job, error } = await sb.from('jobs').insert({ hirer_id: state.profile.id, title: v.title.trim(), description: v.description.trim(),
+      category: v.category, area: v.area.trim(), budget: Number(v.budget), job_date: v.job_date || null }).select('id').single();
     if (error) return toast(error.message);
-    toast('Job submitted. It will show to workers once an admin approves it.'); state.view = 'myjobs'; render();
+    const { error: le } = await sb.rpc('set_job_location', { p_job: job.id, p_lat: v.latitude ? Number(v.latitude) : null,
+      p_lng: v.longitude ? Number(v.longitude) : null, p_note: v.address_note });
+    if (le) toast('Job saved, but the location did not save. Add it from My jobs. (' + le.message + ')');
+    else toast('Job submitted. It will show to workers once an admin approves it.');
+    state.view = 'myjobs'; render();
   },
   apply: async f => {
     const v = Object.fromEntries(new FormData(f));
     const { error } = await sb.from('applications').insert({ job_id: f.dataset.job, worker_id: state.profile.id, offer_price: Number(v.offer_price), note: v.note.trim() });
     if (error) return toast(error.code === '23505' ? 'You already applied to this job' : error.message);
     closeModal(); toast('Application sent'); render();
+  },
+  location: async f => {
+    const v = Object.fromEntries(new FormData(f));
+    if (!v.latitude && !v.address_note.trim()) return toast('Add a pin or a landmark');
+    const { error } = await sb.rpc('set_job_location', { p_job: f.dataset.job, p_lat: v.latitude ? Number(v.latitude) : null,
+      p_lng: v.longitude ? Number(v.longitude) : null, p_note: v.address_note });
+    if (error) return toast(error.message);
+    closeModal(); toast('Location saved'); render();
   },
   payment: async f => {
     const v = Object.fromEntries(new FormData(f));
