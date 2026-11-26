@@ -52,6 +52,9 @@
   .stat{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:10px 6px;text-align:center}
   .stat b{display:block;font-size:20px;color:var(--g)} .stat span{font-size:12px;color:var(--mut)}
   .note{background:var(--g2);border-radius:10px;padding:10px 12px;margin:8px 0;font-size:15px}
+  .phone{display:flex;align-items:stretch}
+  .phone span{padding:11px 12px;background:var(--g2);border:1px solid var(--bd);border-right:0;border-radius:10px 0 0 10px;font-weight:800;color:var(--g)}
+  .phone input{border-radius:0 10px 10px 0}
 </style>
 </head>
 <body>
@@ -84,6 +87,11 @@ const phoneDigits = p => { let d = String(p||'').replace(/\D/g,''); if (d.starts
 const phoneEmail = p => phoneDigits(p) + '@phone.zfreelancer.app';
 const toLoginEmail = id => String(id||'').includes('@') ? id.trim() : phoneEmail(id);
 const waLink = (phone, msg) => { const d = phoneDigits(phone); return d ? `https://wa.me/${d}?text=${encodeURIComponent(msg||'')}` : null; };
+/* Phone: "+26" is pre-typed, the person types their 10-digit number starting with 0 (e.g. 0971234567) */
+const phoneField = value => `<div class="phone"><span>+26</span><input name="phone" type="tel" inputmode="numeric" pattern="0[0-9]{9}" minlength="10" maxlength="10" required placeholder="0971234567" value="${esc(value)}" title="10 digits starting with 0, e.g. 0971234567"></div>`;
+const localPhone = ph => { const d = phoneDigits(ph); return d.startsWith('260') && d.length === 12 ? '0' + d.slice(3) : ''; };
+const validPhone = p => /^0\d{9}$/.test(String(p || ''));
+document.addEventListener('input', e => { if (e.target.matches('input[name=phone]')) e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10); });
 const stars = s => s && s.review_count > 0 ? `★ ${s.avg_rating} (${s.review_count})` : 'New';
 const opts = (list, sel) => list.map(x => `<option ${x===sel?'selected':''}>${esc(x)}</option>`).join('');
 const initials = n => String(n||'?').trim().split(/\s+/).map(w => w[0]).slice(0,2).join('').toUpperCase();
@@ -196,7 +204,7 @@ function renderAuth(){
       <form data-form="${su?'signup':'login'}">
         ${su ? `<div class="grid"><div><label>First name</label><input name="first_name" required maxlength="50" autocomplete="given-name"></div>
         <div><label>Last name</label><input name="last_name" required maxlength="50" autocomplete="family-name"></div></div>
-        <label>Phone (WhatsApp number)</label><input name="phone" type="tel" placeholder="097 123 4567" required>
+        <label>Phone (WhatsApp number, 10 digits)</label>${phoneField('')}
         <label>Your area</label><input name="area" list="areas" placeholder="e.g. Chilenje" required>
         ${photoField('', '', true)}
         <label>I want to…</label>
@@ -397,7 +405,7 @@ async function viewProfile(el){
       <div class="grid"><div><label>First name</label><input name="first_name" required maxlength="50" value="${esc(p.first_name)}"></div>
       <div><label>Last name</label><input name="last_name" required maxlength="50" value="${esc(p.last_name)}"></div></div>
       ${photoField(p.avatar_url, p.full_name, false)}
-      <label>Phone (shared only after a job is accepted)</label><input name="phone" type="tel" required value="${esc(state.phone)}">
+      <label>Phone (10 digits, shared only after a job is accepted)</label>${phoneField(localPhone(state.phone))}
       <label>Area</label><input name="area" list="areas" required value="${esc(p.area)}">
       <label>About me</label><textarea name="bio" maxlength="500" placeholder="Experience, tools you have, how you work">${esc(p.bio)}</textarea>
       <label>I use this app to</label>
@@ -534,11 +542,11 @@ const forms = {
   signup: async f => {
     const v = Object.fromEntries(new FormData(f)), photo = f.elements.photo.files[0];
     if (!photo) return toast('Please add a profile photo');
-    if (phoneDigits(v.phone).length < 11) return toast('Enter your full phone number, e.g. 097 123 4567');
+    if (!validPhone(v.phone)) return toast('Phone number must be 10 digits starting with 0, e.g. 0971234567');
     const first = v.first_name.trim(), last = v.last_name.trim();
     const email = (v.email || '').trim() || phoneEmail(v.phone);
     const { data, error } = await sb.auth.signUp({ email, password: v.password, options: { data: {
-      first_name: first, last_name: last, full_name: first + ' ' + last, phone: v.phone.trim(), area: v.area.trim(),
+      first_name: first, last_name: last, full_name: first + ' ' + last, phone: '+26' + v.phone, area: v.area.trim(),
       is_worker: v.role !== 'hirer', is_hirer: v.role !== 'worker' } } });
     if (error) return toast(error.message);
     if (!data.session) { state.authMode = 'login'; renderAuth(); toast('Check your email to confirm, then log in and add your photo.'); return; }
@@ -586,11 +594,12 @@ const forms = {
   profile: async f => {
     const fd = new FormData(f), v = Object.fromEntries(fd), photo = f.elements.photo.files[0];
     const is_worker = !!v.is_worker, is_hirer = !!v.is_hirer;
+    if (!validPhone(v.phone)) return toast('Phone number must be 10 digits starting with 0, e.g. 0971234567');
     if (!is_worker && !is_hirer) return toast('Pick at least one: find work or hire people');
     const { error } = await sb.from('profiles').update({ first_name: v.first_name.trim(), last_name: v.last_name.trim(), area: v.area.trim(), bio: v.bio.trim(),
       categories: fd.getAll('cat'), is_worker, is_hirer, available: !!v.available }).eq('id', state.profile.id);
     if (error) return toast(error.message);
-    const { error: e2 } = await sb.from('private_contacts').update({ phone: v.phone.trim() }).eq('user_id', state.profile.id);
+    const { error: e2 } = await sb.from('private_contacts').update({ phone: '+26' + v.phone }).eq('user_id', state.profile.id);
     if (e2) return toast(e2.message);
     if (photo) { try { await uploadAvatar(photo); } catch (err) { toast('Saved, but the photo did not upload: ' + (err.message || '')); } }
     await loadProfile(); toast('Profile saved'); render();
